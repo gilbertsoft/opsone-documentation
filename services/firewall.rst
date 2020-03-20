@@ -6,7 +6,7 @@ Firewall
 Default settings
 ----------------
 
-By default, all incoming and outgoing traffic is blocked, expect:
+By default, all incoming and outgoing traffic is blocked, except:
 
 - related or established connections
 - ICMP/ICMPv6
@@ -62,7 +62,7 @@ action
 * `reject`: The packet is rejected with a suitable ICMP response.
 * `drop`: The packet is dropped.
 
-source
+source (optional)
 """"""
 
 IPv4 source address or network. Examples:
@@ -70,7 +70,7 @@ IPv4 source address or network. Examples:
 * `192.168.0.1`
 * `192.168.0.0/24`
 
-source6
+source6 (optional)
 """""""
 
 IPv6 source address or network. Examples:
@@ -78,7 +78,7 @@ IPv6 source address or network. Examples:
 * `2001:db8::1`
 * `2001:db8::/32`
 
-destination
+destination (optional)
 """""""""""
 
 IPv4 destination address or network. Examples:
@@ -86,7 +86,7 @@ IPv4 destination address or network. Examples:
 * `192.168.0.1`
 * `192.168.0.0/24`
 
-destination6
+destination6 (optional)
 """"""""""""
 
 IPv6 destination address or network. Examples:
@@ -103,6 +103,14 @@ dport
 """""
 
 Destination port number.
+
+proto
+"""""
+
+Protocol. Examples:
+
+* `tcp`
+* `udp`
 
 Examples
 ^^^^^^^^
@@ -133,10 +141,10 @@ You can add custom rules to deny services, too:
 
     {
       "base::firewall::rules": {
-        "020 deny HTTP from evil network":
+        "020 deny HTTP from evil network": {
           "action": "reject",
           "chain": "INPUT",
-          "source" "192.168.0.0/24",
+          "source": "192.168.0.0/24",
           "source6": "2001:db8::/32",
           "dport": "80"
         }
@@ -150,4 +158,4 @@ Logged in as user ``devop``, you can diagnose created rules and logs
 trough the following means:
 
 -  Firewall logs in ``/var/log/messages``
--  show created rules with ``sudo iptables -L`` / ``sudo ip6tables -L``
+-  show created rules with ``iptables-list`` or ``iptables-rules``

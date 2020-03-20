@@ -27,6 +27,29 @@ You have to define one of the following types for each website.
 
 .. note:: If you need a type not mentioned here yet, do not hesitate to contact us
 
+typo3cmsv10 (Alpha)
+^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+
+   * - Web server
+     - nginx with ModSecurity WAF, core rule set and TYPO3 10.x compatible white/blacklists
+   * - runtime environment
+     - PHP 7.2
+   * - Database
+     - MySQL (MariaDB 10.x ) with database, user, and grants
+   * - Default webroot
+     - ~/web
+
+-  PHP and nginx settings adjusted to TYPO3 10 requirements
+-  latest TYPO3 CMS 10 sprint release cloned into ``/opt/typo3/TYPO3\_10/``
+-  PHP and nginx settings adjusted to TYPO3 10 requirements
+-  TYPO3 application context can be set by setting the ``TYPO3_CONTEXT`` environment variable in custom JSON,
+   see `Environment Variables`_ for details
+-  TYPO3 Scheduler executed every 5 minutes
+
+.. warning:: This type can change and is meant to test TYPO3 10 sprint releases only. Do not run live applications with this type yet
+
 typo3cmsv9
 ^^^^^^^^^^
 
@@ -121,7 +144,7 @@ required to load the appropriate PHP settings, by defining the the
     Flow:
       core:
         subRequestEnvironmentVariables:
-          PHP_INI_SCAN_DIR: '/etc/php72/<username>/neos/:/home/<username>/cnf/'
+          PHP_INI_SCAN_DIR: '/etc/php72/user/<username>/:/home/<username>/cnf/'
 
 .. hint:: see `this Neos Discuss thread <https://discuss.neos.io/t/setup-process-error-with-custom-php-environment/4174>`__ for technical details
 
@@ -159,6 +182,18 @@ wordpress
 - PHP and nginx settings adjusted to WordPress requirements
 - WP-CLI installed and available by using the ``wp`` command
 - wp-cron.php is called every 5 minutes over CLI
+- We have a request limit for ``wp-login.php`` and ``xmlrpc.php`` in place. For both options, our default limit is set to 10 request per minute
+- You can override our defaults inside the Website custom JSON as shown in the exmaple below:
+
+  .. code-block:: json
+
+      {
+        "wordpress_limit_login": "20r/m",
+        "wordpress_limit_xmlrpc": false,
+      }
+  
+  - Request limit for ``wp-login.php`` is set to 20 requests per minute
+  - Request limit for ``xmlrpc.php`` is disabled
 
 .. hint:: Please disable the built in HTTP call to wp-cron.php by setting ``define('DISABLE_WP_CRON', true);``. This additional call is not necessary and disabling it will lower the load on your system.
 
@@ -272,7 +307,7 @@ proxy
 
 -  nginx vhost configured as reverse proxy
 
-.. hint:: to use advanced features or multiple backends, create your own upstream configuration in ``/etc/nginx/custom/http.conf`` and point ``proxy_pass`` to it
+.. hint:: to use advanced features or multiple backends, create your own upstream configuration in ``/etc/nginx/custom/http.conf`` and point ``proxy_pass`` to it. For security reasons, we only allow access to this configuration for the `devop user <../server/access.html#generic-devop-user>`__.
 
 docker
 ^^^^^^
@@ -291,7 +326,7 @@ docker
 -  nginx vhost configured as reverse proxy
 -  install docker and puts the user into the docker group
 
-.. hint:: to use advanced features or multiple backends, create your own upstream configuration in ``/etc/nginx/custom/http.conf`` and point ``proxy_pass`` to it
+.. hint:: to use advanced features or multiple backends, create your own upstream configuration in ``/etc/nginx/custom/http.conf`` and point ``proxy_pass`` to it. For security reasons, we only allow access to this configuration for the `devop user <../server/access.html#generic-devop-user>`__.
 
 nodejs
 ^^^^^^
@@ -361,7 +396,7 @@ ruby
            root /home/user/application/;
        }
 
-.. hint:: to control the nodejs daemon, use the ``ruby-start`` / ``ruby-stop`` / ``ruby-restart`` shortcuts
+.. hint:: to control the ruby daemon, use the ``ruby-start`` / ``ruby-stop`` / ``ruby-restart`` shortcuts
 
 Environments
 ------------
@@ -375,6 +410,8 @@ PROD
 -  no access protection
 -  phpinfo disabled (visible database credentials from environment variables)
 -  E-Mails get sent to their designated recipient (PHP mail() only, see :doc:`../development/email` for details)
+
+.. hint:: You can enable phpinfo by setting ``disable_functions=`` to a empty string in ``~/cnf/php.ini`` (don’t forget ``php-reload``). Important: phpinfo exposed many infos like environment variables such as database credentials. We recommend not to use phpinfo on a publicly accessible website. Please be careful and deactivate phpinfo afterwards.
 
 STAGE
 ^^^^^
@@ -398,27 +435,13 @@ User Handling
 
 The preview user gets applied to all non PROD environments and is
 intended for your own use, but also to allow access to other parties
-like your customer. Use the "preview_htpasswd" option to set a particular
+like your customer. Use the "Preview password" option to set a particular
 password to the preview user. You have to use a htpasswd encrypted value
 which you can generate like this on your local workstation:
 
 ::
 
     htpasswd -n preview
-
-Configuration example:
-
-.. code-block:: json
-
-  {
-    "devexamplenet": {
-      "type": "typo3cms",
-      "env": "DEV",
-      "server_name": "dev.example.net www.dev.example.net",
-      "password": "1234",
-      "preview_htpasswd": "$apr1$RSDdas2323$23case23DCDMY.0xgTr/"
-    }
-  }
 
 Furthermore, you can add additional users trough the "website::users"
 configuration like this:
@@ -445,14 +468,7 @@ To rename the default "preview" username, use the ``preview_username`` parameter
 .. code-block:: json
 
   {
-    "devexamplenet": {
-      "type": "typo3cms",
-      "env": "DEV",
-      "server_name": "dev.example.net www.dev.example.net",
-      "password": "1234",
-      "preview_username": "showme",
-      "preview_htpasswd": "$apr1$RSDdas2323$23case23DCDMY.0xgTr/"
-    }
+    "preview_username": "showme",
   }
 
 Furthermore, its possible to set the preview username globally through ``website::preview_username``.
@@ -545,21 +561,21 @@ configurations/features are applied to the vhost:
 -  daily `Qualys SSL Labs <https://www.ssllabs.com/>`__ API Check
 -  global HTTP to HTTPS redirect
 
-Automated Certificate Management Environment (ACME/Let's Encrypt)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Let's Encrypt
+^^^^^^^^^^^^^
 
-We support ACME certificates by `Let's
-Encrypt <https://letsencrypt.org/>`__. To enable this, set ``ssl_acme``
-to true. You can select a specific ACME provider by
-``ssl_acme_provider``, however by now only ``letsencrypt`` is available
-and already set as default, so you can omit this usually.
-
-.. warning:: Let's Encrypt will try to reach your server by HTTP. Make sure that all hosts added to ``server_name`` end up on your server already, otherwise validation will fail
+We support free tls certificates by `Let's Encrypt <https://letsencrypt.org/>`__.
+You can activate Letsencrypt for your website in the cockpit.
+The certificates are automatically renewed 30 days before expiration.
 
 Debug validation problems
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In order to debug validation issues, we introduced the ``letsencrypt-renew`` shortcut which will trigger a run of our Let's Encrypt client, and let you see all debug output to identifiy possible problems.
+
+- Make sure that all hosts added to ``Server name`` point to the correct server (A and AAAA DNS records).
+- Let's Encrypt will try to reach your website at the endpoint ``/.well-known/acme-challenge/`` for validation purposes. Make sure that you do not overwrite this path within your `own nginx configuration <#custom-configuration>`__.
+- You can check access to the validation directory by yourself by fetching the control file reachable at ``http://example.com/.well-known/acme-challenge/monitoring``
 
 Renewal
 ~~~~~~~
@@ -568,21 +584,15 @@ Certificates from Let's Encrypt will be valid for 90 days. They are renewed auto
 
 Furthermore, we check all certificates from our monitoring and will contact you if there are certificates expiring in less than 21 days.
 
+Export
+~~~~~~
 
-Configuration example
-~~~~~~~~~~~~~~~~~~~~~
+Existing Lets Encrypt certificates can be read with the `devop user <../server/access.html#generic-devop-user>`__.
+This is useful if you want to temporarily use the old certificate on a new server (e.g. for a migration).
 
-.. code-block:: json
+You can find your certificates under ``/etc/nginx/ssl``.
 
-  {
-    "devexamplenet": {
-      "type": "html",
-      "env": "PROD",
-      "ssl_acme": "true",
-      "ssl_acme_provider": "letsencrypt", # not required, as letsencrypt is already the default
-      "server_name": "dev.example.net www.dev.example.net" # make sure that all this hosts point to this server already
-    }
-  }
+.. warning:: As soon as the certificates leave our servers, we no longer have control over them. Please be aware of this and be careful.
 
 Order certificate
 ^^^^^^^^^^^^^^^^^
@@ -623,28 +633,11 @@ Submit this CSR to us for further processing, or order certificate by yourself f
 Configure website
 ^^^^^^^^^^^^^^^^^
 
--  ssl\_key: generated private key
--  ssl\_cert: signed certificate, including appropriate intermediate
+-  SSL key: generated private key
+-  SSL key: signed certificate, including appropriate intermediate
    certificates
 
-Note: make sure to use the correct line indenting
-
-.. code-block:: json
-
-  {
-    "website::sites": {
-      "magentoexample": {
-        "server_name": "magento.example.net",
-        "env": "PROD",
-        "type": "magento",
-        "password": "Aiw7vaakos04h7e",
-        "ssl_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDRHc47/0zg+cAg\nMkHKY1U7TOFChPawiNmU94MYjOTzK/Lc4C2op1sDCAP4Ow+qx7BK8NLJkHUPyOXU\nzjTTTUN/dGoElGz4gFaCCkMhk8hRZEs8jTwAm8tq4ruUVk9DIgQ9K/potm5kzT/T\nKyW85hETMLi+tRw9Kbn/j4QljWmqcd4mPWyaMT1o4lDTszq7NCHGch+dxa4FJYib\nz05C6+BVpw9w+BWFERlbgG5hvMMXtxexlju24e2fJV/TPCVbgDk/ecFDhupRMdj9\nZKrlPcUZNReWxgX+ZGT8YfWI2tYfW9+H6iVvcwV2gftiDp4+N4r4Ae52cMFxcKBR\n5fn4i8hbAgMBAAECggEAYv66MBr3GRYChvtju9z0b2NAzE3HvuC6KFRYAlpI1Hl8\numWCF/JKGpBD2NKU4yMvaPrCvtsdH8DaVLjdtx4/kunYepyNTcLrsRoMl6uvTCCv\noVW3Dw6x6MK3TEzjrwM+gHr+S235qsyjp2MotVkwwiXxf46bdLT5MWuOgnyEhkQQ\ncmv6qDmjgDP5vH5r4riAlPKMq+jGtLc/2QWs22UxQS0/a7n0pks472AonLI8r1M8\nsYcCAC6uEvxRZdVcJOlRK78dPI3NLxFhSbvv/GcVOypyhvQ3uVYV71xA/AgcpBLd\nFc2FULRCCU/UEjmo62uYNkG09lCchBwK8BLYYWrCoQKBgQDqL5Eo9oLMTuzysu8I\nvemXODOTfxQb1OTH1dyA4kSAtmNF2IO5rNnvVsS5YlbSjZMEXRMYTSflp7L7ae2l\nXLqjhijdB6l5cdgsPyHD2phYOvJzWMuzjkCtIjm5QfdMfsUZnBSPbwaRF1zWxbVn\nmHlWi3Zcu8U65l9gsJviZelqqwKBgQDkmG4W1SEySON4i44JwzsmXQHP1d8KHES1\nhB1IETNYV2HzIAWnnX/fqPwqyahzegKTGut9U7kJ8QHsHvz56nHdiQ8zw4BZxQPw\nj4Pms1IpzpO48yf4swskqwgkk5W6wTHCD/Q48tqFtAMPwC/D88F966ipc6lyldsJ\nUXvLeeMZEQKBgGTHYZWaOAGKOYfcHufJKnwMEI350wKDJI0m6ISCWu51DtWg7lb6\nHrNTyMbqnehwSoNHNo9vrKq0914gYMeX1y3F71HnGTSNHHU2Gea57HOTsoCXBtpX\nblfTcbnavHyr1VBHDcYIBnBr+GTooj9Zq2XmEGKp35+QQh1PA1ZzevaPAoGASdop\nLv06VVmRC9/iSqslT/aaYEATZ9vMIuyE3USZVwAcKAT/brCGoIaiuVwfLPeNH2OC\nEyJaVKjlWxiD2GXy1YSzQaD2tYneBPkIvx7N+62+sfD0x/doMTeEUPTRWd2SqsSm\nvUNQcAPBPXR0uhTlPT5GZkB0zQ03D6KgoRNG2FECgYEAgXPJjIsqhcC0PNEuRgdC\n9pZq+Prvp4TniVwQKyPniw/FjAplI4uN/+1fiYPexaLzINnXUuvOTYPABec3T2DZ\nGV0lffmdZ+CleU1Xi5DjLGn8m0Gdy6mecE2Le9/Q13o3owF9rm0Drhqqd8T6vVt3\nhiw7C+lCp2XheqP+QchwxiY=\n-----END PRIVATE KEY-----\n",
-        "ssl_cert": "-----BEGIN CERTIFICATE-----\nMIIEATCCAumgAwIBAgIJAMdVCMOVZl30MA0GCSqGSIb3DQEBCwUAMIGWMQswCQYD\nVQQGEwJDSDEPMA0GA1UECAwGWnVyaWNoMQ8wDQYDVQQHDAZadXJpY2gxIzAhBgNV\nBAoMGnNub3dmbGFrZSBwcm9kdWN0aW9ucyBHbWJIMRowGAYDVQQDDBF0eXBvMy5l\neGFtcGxlLm5ldDEkMCIGCSqGSIb3DQEJARYVd2VibWFzdGVyQGV4YW1wbGUubmV0\nMB4XDTE1MDIxMjEyMDU1MloXDTI1MDIwOTEyMDU1MlowgZYxCzAJBgNVBAYTAkNI\nMQ8wDQYDVQQIDAZadXJpY2gxDzANBgNVBAcMBlp1cmljaDEjMCEGA1UECgwac25v\nd2ZsYWtlIHByb2R1Y3Rpb25zIEdtYkgxGjAYBgNVBAMMEXR5cG8zLmV4YW1wbGUu\nbmV0MSQwIgYJKoZIhvcNAQkBFhV3ZWJtYXN0ZXJAZXhhbXBsZS5uZXQwggEiMA0G\nCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDRHc47/0zg+cAgMkHKY1U7TOFChPaw\niNmU94MYjOTzK/Lc4C2op1sDCAP4Ow+qx7BK8NLJkHUPyOXUzjTTTUN/dGoElGz4\ngFaCCkMhk8hRZEs8jTwAm8tq4ruUVk9DIgQ9K/potm5kzT/TKyW85hETMLi+tRw9\nKbn/j4QljWmqcd4mPWyaMT1o4lDTszq7NCHGch+dxa4FJYibz05C6+BVpw9w+BWF\nERlbgG5hvMMXtxexlju24e2fJV/TPCVbgDk/ecFDhupRMdj9ZKrlPcUZNReWxgX+\nZGT8YfWI2tYfW9+H6iVvcwV2gftiDp4+N4r4Ae52cMFxcKBR5fn4i8hbAgMBAAGj\nUDBOMB0GA1UdDgQWBBSSJyPyLa8CNKMDR3BAOcuuzzEqlTAfBgNVHSMEGDAWgBSS\nJyPyLa8CNKMDR3BAOcuuzzEqlTAMBgNVHRMEBTADAQH/MA0GCSqGSIb3DQEBCwUA\nA4IBAQAMKv2Kdw2LkskJm/GAkEsavoYf6qAPruwcsp8cx+7doXOpptZ/w+m8NK8i\n6ffi65wQ4TGlFxEvXM1Ts4S1xF/+6JVnnp8RVGvfgDL7xi6juMqbtM5yBxjHKO6W\nAuxOmwPcd6cO5qL+MCSgIe13bn/V4bw/JLv9LONuwXHJuv0FEoazbSyB6uTwYf2D\npWHEkXvkz5A1hqu3y2jFq2cQffoO31GGx29U3uSl+Esp5bL/J0bQd3TUbwvu6FY1\nNgUR7Mx1t/4/uk9FRl87d2rRslc5VyvD5v7MFE6jYJap74j5BrrfUUTNbzVXdPCS\nv8jOaIjDp5AMoZxbPMlv/5Tk85uF"
-      }
-    }
-  }
-
-Warning: Make sure the first ``server_name`` used is valid within your
+Warning: Make sure the first ``Server name`` used is valid within your
 certificate as we redirect all HTTP requests within this vHost to
 ``https://first-in-server_name``
 
@@ -976,6 +969,8 @@ PHP
 You can set custom PHP configurations trough the ``~/cnf/php.ini`` file.
 See the `PHP Documentation <http://php.net/manual/en/configuration.file.per-user.php>`__ for details.
 
+.. warning:: You have to reload php after changes with the ``php-reload`` shortcut
+
 ::
 
     memory_limit = 1G
@@ -1141,3 +1136,17 @@ To set or override environment variables per website, use the ``envvar`` option 
       }
     }
 
+White label
+-----------
+
+Default Virtual Host
+^^^^^^^^^^^^^^^^^^^^
+
+The default vhost is stored in ``/var/www/``. You can use your own content stored in a git repository with the following configuration.
+
+.. code-block:: json
+
+    {
+      "website::default::webroot::gitsource": "git@git.example.com:acme/project",
+      "website::default::webroot::gitkey": "-----BEGIN RSA PRIVATE KEY-----[..]-----END RSA PRIVATE KEY-----",
+    }
